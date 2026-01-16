@@ -1,244 +1,209 @@
-/// Service to identify device vendors from MAC addresses
-/// Uses MAC OUI (Organizationally Unique Identifier) prefix lookup
-class MacVendorService {
-  // Common MAC address prefixes (first 6 characters) mapped to vendors
-  // This is a subset - production apps use comprehensive databases
-  static final Map<String, String> _macVendorDatabase = {
-    // Apple
-    '00:03:93': 'Apple',
-    '00:0A:95': 'Apple',
-    '00:0D:93': 'Apple',
-    '00:17:F2': 'Apple',
-    '00:1B:63': 'Apple',
-    '00:1C:B3': 'Apple',
-    '00:1D:4F': 'Apple',
-    '00:1E:52': 'Apple',
-    '00:1F:5B': 'Apple',
-    '00:1F:F3': 'Apple',
-    '00:21:E9': 'Apple',
-    '00:22:41': 'Apple',
-    '00:23:12': 'Apple',
-    '00:23:32': 'Apple',
-    '00:23:6C': 'Apple',
-    '00:23:DF': 'Apple',
-    '00:24:36': 'Apple',
-    '00:25:00': 'Apple',
-    '00:25:4B': 'Apple',
-    '00:25:BC': 'Apple',
-    '00:26:08': 'Apple',
-    '00:26:4A': 'Apple',
-    '00:26:B0': 'Apple',
-    '00:26:BB': 'Apple',
-    '28:CF:E9': 'Apple',
-    '34:36:3B': 'Apple',
-    '3C:07:54': 'Apple',
-    '40:A6:D9': 'Apple',
-    '50:EA:D6': 'Apple',
-    '64:B0:A6': 'Apple',
-    '68:5B:35': 'Apple',
-    '7C:C3:A1': 'Apple',
-    '8C:85:90': 'Apple',
-    '90:84:0D': 'Apple',
-    'A4:D1:8C': 'Apple',
-    'AC:BC:32': 'Apple',
-    'B8:E8:56': 'Apple',
-    'C8:2A:14': 'Apple',
-    'D0:E1:40': 'Apple',
-    'E0:C9:7A': 'Apple',
-    'F0:B4:79': 'Apple',
-    'F8:1E:DF': 'Apple',
-    
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+/// Enhanced MAC vendor lookup service with online API fallback
+/// Supports popular brands: Infinix, Realme, Redmi, OPPO, vivo, etc.
+class EnhancedMacVendorService {
+  // Cache to avoid repeated API calls
+  static final Map<String, String> _cache = {};
+
+  // Enhanced local database with popular phone brands
+  static final Map<String, String> _localDatabase = {
+    // Infinix (Transsion Holdings) - Very popular in Pakistan
+    '00606E': 'Infinix', '04D3B0': 'Infinix', '08EDB9': 'Infinix',
+    '1C3BF3': 'Infinix', '2047ED': 'Infinix', '244B03': 'Infinix',
+    '34415D': 'Infinix', '3CCD5D': 'Infinix', '5CC307': 'Infinix',
+    '68EBAE': 'Infinix', '7C1C4E': 'Infinix', 'A0F459': 'Infinix',
+    'D46E5C': 'Infinix', 'E884A5': 'Infinix', 'F8C39E': 'Infinix',
+
+    // Realme (BBK Electronics) - Very popular
+    '009EC8': 'Realme', '044FAA': 'Realme', '1C994C': 'Realme',
+    '346BD3': 'Realme', '3CF808': 'Realme', '4491DB': 'Realme',
+    '58C5CB': 'Realme', '683E34': 'Realme', '706655': 'Realme',
+    '886B0F': 'Realme', '94E96A': 'Realme', 'A036BC': 'Realme',
+    'C09F05': 'Realme', 'D067E5': 'Realme', 'F0038C': 'Realme',
+
+    // Xiaomi / Redmi - Extremely popular
+    '04CF8C': 'Xiaomi', '085B0E': 'Xiaomi', '286C07': 'Xiaomi',
+    '34CE00': 'Xiaomi', '44032C': 'Xiaomi', '508F4C': 'Xiaomi',
+    '640980': 'Xiaomi', '64B473': 'Xiaomi', '68DFDD': 'Xiaomi',
+    '6C5697': 'Xiaomi', '7811DC': 'Xiaomi', '7C1C68': 'Xiaomi',
+    '8CBEBE': 'Xiaomi', '98FAE3': 'Xiaomi', 'A086C6': 'Xiaomi',
+    'C40BCB': 'Xiaomi', 'D06FAA': 'Xiaomi', 'F8A45F': 'Xiaomi',
+
+    // OPPO (BBK Electronics)
+    '08863B': 'OPPO', '14D424': 'OPPO', '1CB72C': 'OPPO',
+    '28C63F': 'OPPO', '445EF3': 'OPPO', '54FA3E': 'OPPO',
+    '6CB7F4': 'OPPO', '74DFBF': 'OPPO', '886B0F': 'OPPO',
+    '983571': 'OPPO', 'AC3743': 'OPPO', 'B8D7AF': 'OPPO',
+    'D067E5': 'OPPO', 'E45D75': 'OPPO', 'F8461C': 'OPPO',
+
+    // vivo (BBK Electronics)
+    '10BF48': 'vivo', '203DB2': 'vivo', '30B4B8': 'vivo',
+    '503275': 'vivo', '603D26': 'vivo', '80797B': 'vivo',
+    '90B0ED': 'vivo', 'B0A7B9': 'vivo', 'C85A9F': 'vivo',
+    'D4970B': 'vivo', 'E0191D': 'vivo', 'F0728C': 'vivo',
+
+    // OnePlus
+    'AC3743': 'OnePlus', 'D0C637': 'OnePlus', 'E470B8': 'OnePlus',
+
     // Samsung
-    '00:12:FB': 'Samsung',
-    '00:15:B9': 'Samsung',
-    '00:16:6B': 'Samsung',
-    '00:16:6C': 'Samsung',
-    '00:17:C9': 'Samsung',
-    '00:18:AF': 'Samsung',
-    '00:1A:8A': 'Samsung',
-    '00:1C:43': 'Samsung',
-    '00:1D:25': 'Samsung',
-    '00:1E:7D': 'Samsung',
-    '00:21:19': 'Samsung',
-    '00:23:39': 'Samsung',
-    '00:23:D6': 'Samsung',
-    '00:23:D7': 'Samsung',
-    '00:24:54': 'Samsung',
-    '00:24:90': 'Samsung',
-    '00:24:91': 'Samsung',
-    '00:26:37': 'Samsung',
-    '00:26:5D': 'Samsung',
-    '00:26:5F': 'Samsung',
-    '34:23:BA': 'Samsung',
-    '38:0A:94': 'Samsung',
-    '40:0E:85': 'Samsung',
-    '50:32:37': 'Samsung',
-    '50:B7:C3': 'Samsung',
-    '5C:0A:5B': 'Samsung',
-    '88:32:9B': 'Samsung',
-    '90:18:7C': 'Samsung',
-    'A0:0B:BA': 'Samsung',
-    'B0:C5:59': 'Samsung',
-    'C8:19:F7': 'Samsung',
-    'D0:17:6A': 'Samsung',
-    'E8:50:8B': 'Samsung',
-    'EC:1D:8B': 'Samsung',
-    
+    '0012FB': 'Samsung', '0015B9': 'Samsung', '00166B': 'Samsung',
+    '0017C9': 'Samsung', '0018AF': 'Samsung', '001C43': 'Samsung',
+    '3423BA': 'Samsung', '380A94': 'Samsung', '400E85': 'Samsung',
+    '503237': 'Samsung', '50B7C3': 'Samsung', '88329B': 'Samsung',
+    'A00BBA': 'Samsung', 'C819F7': 'Samsung', 'D0176A': 'Samsung',
+    'E8508B': 'Samsung', 'EC1D8B': 'Samsung',
+
+    // Apple
+    '000393': 'Apple', '000A95': 'Apple', '000D93': 'Apple',
+    '0017F2': 'Apple', '001B63': 'Apple', '001CB3': 'Apple',
+    '28CFE9': 'Apple', '3C0754': 'Apple', '50EAD6': 'Apple',
+    '685B35': 'Apple', '8C8590': 'Apple', 'A4D18C': 'Apple',
+    'B8E856': 'Apple', 'D0E140': 'Apple', 'F0B479': 'Apple',
+
     // Huawei
-    '00:18:82': 'Huawei',
-    '00:1E:10': 'Huawei',
-    '00:25:9E': 'Huawei',
-    '00:46:4B': 'Huawei',
-    '00:66:4B': 'Huawei',
-    '00:E0:FC': 'Huawei',
-    '08:19:A6': 'Huawei',
-    '18:4F:32': 'Huawei',
-    '28:6E:D4': 'Huawei',
-    '50:01:BB': 'Huawei',
-    '58:2A:F7': 'Huawei',
-    '6C:E8:73': 'Huawei',
-    '78:D7:52': 'Huawei',
-    '84:A8:E4': 'Huawei',
-    '98:52:B1': 'Huawei',
-    'AC:E2:15': 'Huawei',
-    'C8:14:79': 'Huawei',
-    'D0:7A:B5': 'Huawei',
-    'E4:D3:32': 'Huawei',
-    
-    // Xiaomi
-    '04:CF:8C': 'Xiaomi',
-    '28:6C:07': 'Xiaomi',
-    '34:CE:00': 'Xiaomi',
-    '50:8F:4C': 'Xiaomi',
-    '64:09:80': 'Xiaomi',
-    '64:B4:73': 'Xiaomi',
-    '68:DF:DD': 'Xiaomi',
-    '6C:56:97': 'Xiaomi',
-    '78:11:DC': 'Xiaomi',
-    '7C:1C:68': 'Xiaomi',
-    '8C:BE:BE': 'Xiaomi',
-    '98:FA:E3': 'Xiaomi',
-    'A0:86:C6': 'Xiaomi',
-    'C4:0B:CB': 'Xiaomi',
-    'F8:A4:5F': 'Xiaomi',
-    
-    // TP-Link (Routers)
-    '00:27:19': 'TP-Link',
-    '14:CF:92': 'TP-Link',
-    '18:D6:C7': 'TP-Link',
-    '50:C7:BF': 'TP-Link',
-    '54:A5:1B': 'TP-Link',
-    '64:66:B3': 'TP-Link',
-    '74:DA:38': 'TP-Link',
-    '98:DE:D0': 'TP-Link',
-    'A0:F3:C1': 'TP-Link',
-    'B0:95:75': 'TP-Link',
-    'C0:06:C3': 'TP-Link',
-    'D8:07:B6': 'TP-Link',
-    'E8:48:B8': 'TP-Link',
-    'F4:F2:6D': 'TP-Link',
-    
-    // D-Link (Routers)
-    '00:05:5D': 'D-Link',
-    '00:0D:88': 'D-Link',
-    '00:11:95': 'D-Link',
-    '00:13:46': 'D-Link',
-    '00:15:E9': 'D-Link',
-    '00:17:9A': 'D-Link',
-    '00:19:5B': 'D-Link',
-    '00:1B:11': 'D-Link',
-    '00:1C:F0': 'D-Link',
-    '00:1E:58': 'D-Link',
-    
-    // Netgear (Routers)
-    '00:09:5B': 'Netgear',
-    '00:0F:B5': 'Netgear',
-    '00:14:6C': 'Netgear',
-    '00:18:4D': 'Netgear',
-    '00:1B:2F': 'Netgear',
-    '00:1E:2A': 'Netgear',
-    '00:24:B2': 'Netgear',
-    '00:26:F2': 'Netgear',
-    
-    // Asus (Routers/Laptops)
-    '00:11:2F': 'Asus',
-    '00:15:F2': 'Asus',
-    '00:17:31': 'Asus',
-    '00:1A:92': 'Asus',
-    '00:1D:60': 'Asus',
-    '00:22:15': 'Asus',
-    '00:23:54': 'Asus',
-    '00:24:8C': 'Asus',
-    '00:26:18': 'Asus',
-    
-    // Cisco
-    '00:01:42': 'Cisco',
-    '00:01:43': 'Cisco',
-    '00:01:63': 'Cisco',
-    '00:01:64': 'Cisco',
-    '00:01:96': 'Cisco',
-    '00:01:97': 'Cisco',
-    
-    // HP
-    '00:01:E6': 'HP',
-    '00:08:83': 'HP',
-    '00:0E:7F': 'HP',
-    '00:10:E3': 'HP',
-    '00:11:0A': 'HP',
-    '00:12:79': 'HP',
-    
-    // Dell
-    '00:06:5B': 'Dell',
-    '00:08:74': 'Dell',
-    '00:0B:DB': 'Dell',
-    '00:0D:56': 'Dell',
-    '00:11:43': 'Dell',
-    '00:12:3F': 'Dell',
-    '00:13:72': 'Dell',
-    '00:14:22': 'Dell',
-    
-    // Lenovo
-    '00:1C:25': 'Lenovo',
-    '00:21:97': 'Lenovo',
-    '00:23:8B': 'Lenovo',
-    '00:26:6C': 'Lenovo',
-    '50:65:F3': 'Lenovo',
-    '68:F7:28': 'Lenovo',
+    '001882': 'Huawei', '001E10': 'Huawei', '0819A6': 'Huawei',
+    '5001BB': 'Huawei', '582AF7': 'Huawei', '6CE873': 'Huawei',
+    '84A8E4': 'Huawei', 'ACE215': 'Huawei', 'D07AB5': 'Huawei',
+
+    // Tecno (Transsion)
+    '04D3B0': 'Tecno', 'D46E5C': 'Tecno',
+
+    // Motorola
+    '001A1B': 'Motorola', '24DA9B': 'Motorola', '30074D': 'Motorola',
+    '5C0E8B': 'Motorola', 'CCC734': 'Motorola',
+
+    // Routers
+    '002719': 'TP-Link', '14CF92': 'TP-Link', '50C7BF': 'TP-Link',
+    '00055D': 'D-Link', '001195': 'D-Link',
+    '00095B': 'Netgear', '00146C': 'Netgear',
+    '00112F': 'Asus', '001D60': 'Asus',
   };
 
-  /// Get vendor name from MAC address
-  /// Returns null if vendor cannot be determined
-  static String? getVendor(String? macAddress) {
+  /// Main method: Get vendor from MAC address
+  /// Uses local DB first, then fallback to online API
+  static Future<String?> getVendor(String? macAddress) async {
     if (macAddress == null || macAddress.isEmpty) {
+      print('⚠️ MAC address is null or empty');
       return null;
     }
 
-    // Normalize MAC address to uppercase and remove separators
-    String normalizedMac = macAddress
-        .toUpperCase()
-        .replaceAll(':', '')
-        .replaceAll('-', '')
-        .replaceAll('.', '');
-
-    // MAC address should be 12 characters (6 bytes)
-    if (normalizedMac.length < 6) {
+    // Normalize MAC first
+    final normalized = _normalizeMac(macAddress);
+    if (normalized == null) {
+      print('⚠️ Invalid MAC address format: $macAddress');
       return null;
     }
 
-    // Extract OUI (first 6 characters / 3 bytes)
-    String oui = normalizedMac.substring(0, 6);
-    
-    // Format as XX:XX:XX for lookup
-    String formattedOui = '${oui.substring(0, 2)}:${oui.substring(2, 4)}:${oui.substring(4, 6)}';
+    print(
+      '🔍 Looking up vendor for MAC: $macAddress (normalized: $normalized)',
+    );
 
-    // Lookup in database
-    return _macVendorDatabase[formattedOui];
+    // Check cache first
+    if (_cache.containsKey(normalized)) {
+      print('✅ Found in cache: ${_cache[normalized]}');
+      return _cache[normalized];
+    }
+
+    // Try local database
+    final localVendor = _getVendorFromLocal(normalized);
+    if (localVendor != null) {
+      print('✅ Found in local DB: $localVendor');
+      _cache[normalized] = localVendor;
+      return localVendor;
+    }
+
+    // Fallback to online API
+    print('🌐 Trying online API...');
+    final onlineVendor = await _getVendorFromAPI(macAddress);
+    if (onlineVendor != null) {
+      print('✅ Found via API: $onlineVendor');
+      _cache[normalized] = onlineVendor;
+      return onlineVendor;
+    }
+
+    print('❌ Vendor not found for: $macAddress');
+    return null;
   }
 
-  /// Check if MAC address belongs to a known router manufacturer
+  /// Normalize MAC address to consistent format (remove separators, uppercase)
+  static String? _normalizeMac(String macAddress) {
+    try {
+      String normalized = macAddress
+          .toUpperCase()
+          .replaceAll(':', '')
+          .replaceAll('-', '')
+          .replaceAll('.', '')
+          .replaceAll(' ', '');
+
+      if (normalized.length < 6) return null;
+      return normalized;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get vendor from local database
+  static String? _getVendorFromLocal(String normalizedMac) {
+    try {
+      if (normalizedMac.length < 6) return null;
+
+      // Extract OUI (first 6 characters)
+      String oui = normalizedMac.substring(0, 6);
+
+      // Try direct lookup (without colons)
+      if (_localDatabase.containsKey(oui)) {
+        return _localDatabase[oui];
+      }
+
+      // Also try with colons format for backward compatibility
+      String formattedOui =
+          '${oui.substring(0, 2)}:${oui.substring(2, 4)}:${oui.substring(4, 6)}';
+
+      return _localDatabase[formattedOui];
+    } catch (e) {
+      print('Error in local lookup: $e');
+      return null;
+    }
+  }
+
+  /// Get vendor from online API (macvendors.com - free, no API key)
+  static Future<String?> _getVendorFromAPI(String macAddress) async {
+    try {
+      final url =
+          'https://api.macvendors.com/${Uri.encodeComponent(macAddress)}';
+      print('API URL: $url');
+
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 3));
+
+      print('API Response: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        String vendor = response.body.trim();
+        print('API returned: $vendor');
+
+        // Clean up vendor name
+        if (vendor.contains(',')) {
+          vendor = vendor.split(',').first.trim();
+        }
+
+        return vendor.isNotEmpty ? vendor : null;
+      } else {
+        print('API error: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('MAC API lookup failed: $e');
+    }
+    return null;
+  }
+
+  /// Check if vendor is a router manufacturer
   static bool isLikelyRouter(String? vendor) {
     if (vendor == null) return false;
-    
+
     final routerVendors = [
       'TP-Link',
       'D-Link',
@@ -248,8 +213,18 @@ class MacVendorService {
       'Asus',
       'Belkin',
       'Buffalo',
+      'Tenda',
+      'Mercusys',
     ];
 
-    return routerVendors.any((rv) => vendor.toLowerCase().contains(rv.toLowerCase()));
+    return routerVendors.any(
+      (rv) => vendor.toLowerCase().contains(rv.toLowerCase()),
+    );
+  }
+
+  /// Clear cache (useful for testing)
+  static void clearCache() {
+    _cache.clear();
+    print('🗑️ Cache cleared');
   }
 }
