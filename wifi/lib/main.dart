@@ -48,7 +48,7 @@ class WifiScannerApp extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             elevation: 2,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(14),
             ),
           ),
         ),
