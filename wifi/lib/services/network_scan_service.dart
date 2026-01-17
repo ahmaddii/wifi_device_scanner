@@ -3,10 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:dart_ping/dart_ping.dart';
 import '../models/device_model.dart';
-import 'arp_service.dart';
-import 'mac_vendor_service.dart';
 
-/// Enhanced network scanner with proper vendor lookup and MAC resolution
+/// Network scanner with hostname detection
 class NetworkScanService {
   final NetworkInfo _networkInfo = NetworkInfo();
 
@@ -36,7 +34,7 @@ class NetworkScanService {
     }
   }
 
-  /// Enhanced scan with ARP refresh and vendor lookup
+  /// Scan network and detect hostnames
   Future<List<DeviceModel>> scanNetwork({Function(int)? onProgress}) async {
     List<DeviceModel> devices = [];
     Set<String> foundIps = {};
@@ -56,104 +54,27 @@ class NetworkScanService {
         return devices;
       }
 
-      debugPrint('🔍 Starting enhanced network scan on $subnet.*');
+      debugPrint('🔍 Starting network scan on $subnet.*');
 
-      // PHASE 0: Initial ARP Table Read (0-5%)
-      debugPrint('📋 Phase 0: Initial ARP table read...');
-      if (onProgress != null) onProgress(2);
+      // PHASE 1: Quick ping scan (0-40%)
+      debugPrint('📡 Phase 1: Ping scanning...');
 
-      final initialArpTable = await ArpService.getArpTable();
-      debugPrint('Initial ARP entries: ${initialArpTable.length}');
-
-      for (final entry in initialArpTable.entries) {
-        if (entry.key.startsWith(subnet)) {
-          foundIps.add(entry.key);
-        }
-      }
-
-      if (onProgress != null) onProgress(5);
-
-      // PHASE 1: ARP Cache Refresh (5-15%)
-      debugPrint('🔄 Phase 1: Refreshing ARP cache...');
-      
-      await ArpService.refreshArpCache(subnet);
-      
-      if (onProgress != null) onProgress(15);
-
-      // PHASE 2: Read refreshed ARP table (15-20%)
-      debugPrint('📋 Phase 2: Reading refreshed ARP table...');
-      
-      final refreshedArpTable = await ArpService.getArpTable();
-      debugPrint('Refreshed ARP entries: ${refreshedArpTable.length}');
-
-      for (final entry in refreshedArpTable.entries) {
-        if (entry.key.startsWith(subnet)) {
-          foundIps.add(entry.key);
-        }
-      }
-
-      if (onProgress != null) onProgress(20);
-
-      // PHASE 3: TCP Port Scan (20-60%)
-      debugPrint('🔌 Phase 3: TCP port scanning...');
-
-      List<int> commonPorts = [80, 443, 8080, 22, 445, 139, 53];
-      int hostsToScan = 254;
       int scannedHosts = 0;
-
+      int totalHosts = 254;
       List<Future<void>> scanFutures = [];
 
       for (int i = 1; i <= 254; i++) {
         final ip = '$subnet.$i';
 
-        final future = _tcpPortScan(ip, commonPorts).then((isActive) {
-          if (isActive && !foundIps.contains(ip)) {
-            foundIps.add(ip);
-            debugPrint('✓ TCP scan found: $ip');
-          }
-
-          scannedHosts++;
-          if (onProgress != null) {
-            final progress = 20 + ((scannedHosts / hostsToScan) * 40).round();
-            onProgress(progress);
-          }
-        });
-
-        scanFutures.add(future);
-
-        // Process in batches to avoid overwhelming the system
-        if (scanFutures.length >= 50) {
-          await Future.wait(scanFutures);
-          scanFutures.clear();
-        }
-      }
-
-      await Future.wait(scanFutures);
-      debugPrint('TCP scan complete. Total found: ${foundIps.length}');
-
-      // PHASE 4: ICMP Ping Scan (60-80%)
-      debugPrint('📡 Phase 4: ICMP ping scanning...');
-
-      scannedHosts = 0;
-      scanFutures.clear();
-
-      for (int i = 1; i <= 254; i++) {
-        final ip = '$subnet.$i';
-
-        if (foundIps.contains(ip)) {
-          scannedHosts++;
-          continue;
-        }
-
         final future = _pingHost(ip).then((isActive) {
-          if (isActive && !foundIps.contains(ip)) {
+          if (isActive) {
             foundIps.add(ip);
-            debugPrint('✓ Ping found: $ip');
+            debugPrint('✓ Found: $ip');
           }
 
           scannedHosts++;
           if (onProgress != null) {
-            final progress = 60 + ((scannedHosts / hostsToScan) * 20).round();
+            final progress = ((scannedHosts / totalHosts) * 40).round();
             onProgress(progress);
           }
         });
@@ -168,46 +89,81 @@ class NetworkScanService {
       }
 
       await Future.wait(scanFutures);
-      debugPrint('Ping scan complete. Total found: ${foundIps.length}');
+      debugPrint('Ping scan complete. Found: ${foundIps.length} devices');
 
-      // PHASE 5: Final ARP read and device building (80-100%)
-      debugPrint('📦 Phase 5: Building device list with vendor lookup...');
-      if (onProgress != null) onProgress(85);
+      // PHASE 2: TCP port scan for missed devices (40-70%)
+      debugPrint('🔌 Phase 2: TCP port scanning...');
 
-      // Final ARP table read to get MACs for all discovered IPs
-      final finalArpTable = await ArpService.getArpTable();
-      debugPrint('Final ARP table has ${finalArpTable.length} entries');
+      List<int> commonPorts = [80, 443, 8080, 22];
+      scannedHosts = 0;
+      scanFutures.clear();
 
-      // Create device models with vendor lookup
+      for (int i = 1; i <= 254; i++) {
+        final ip = '$subnet.$i';
+
+        if (foundIps.contains(ip)) {
+          scannedHosts++;
+          continue;
+        }
+
+        final future = _tcpPortScan(ip, commonPorts).then((isActive) {
+          if (isActive) {
+            foundIps.add(ip);
+            debugPrint('✓ TCP found: $ip');
+          }
+
+          scannedHosts++;
+          if (onProgress != null) {
+            final progress = 40 + ((scannedHosts / totalHosts) * 30).round();
+            onProgress(progress);
+          }
+        });
+
+        scanFutures.add(future);
+
+        if (scanFutures.length >= 50) {
+          await Future.wait(scanFutures);
+          scanFutures.clear();
+        }
+      }
+
+      await Future.wait(scanFutures);
+      debugPrint('TCP scan complete. Total found: ${foundIps.length}');
+
+      // PHASE 3: Resolve hostnames and build device list (70-100%)
+      debugPrint('📦 Phase 3: Resolving hostnames...');
+      if (onProgress != null) onProgress(75);
+
       int processedDevices = 0;
       List<Future<DeviceModel>> deviceFutures = [];
 
       for (final ip in foundIps) {
-        deviceFutures.add(_createDeviceModel(ip, finalArpTable[ip]));
-        
-        // Process in batches to show progress
+        deviceFutures.add(_createDeviceModel(ip));
+
         if (deviceFutures.length >= 10) {
           final batchDevices = await Future.wait(deviceFutures);
           devices.addAll(batchDevices);
-          
+
           processedDevices += batchDevices.length;
           if (onProgress != null) {
-            final progress = 85 + ((processedDevices / foundIps.length) * 15).round();
+            final progress =
+                75 + ((processedDevices / foundIps.length) * 25).round();
             onProgress(progress);
           }
-          
+
           deviceFutures.clear();
         }
       }
 
-      // Process remaining devices
       if (deviceFutures.isNotEmpty) {
         final batchDevices = await Future.wait(deviceFutures);
         devices.addAll(batchDevices);
       }
 
-      // Sort devices: Router first, then by IP
+      // Sort: Current device first, then router, then by IP
       devices.sort((a, b) {
+        if (a.isCurrentDevice) return -1;
+        if (b.isCurrentDevice) return 1;
         if (a.isRouter) return -1;
         if (b.isRouter) return 1;
         return _compareIpAddresses(a.ipAddress, b.ipAddress);
@@ -216,55 +172,143 @@ class NetworkScanService {
       if (onProgress != null) onProgress(100);
       debugPrint('✅ Scan complete! Found ${devices.length} devices');
 
-      // Print detailed summary
-      int devicesWithMac = devices.where((d) => d.macAddress != null && d.macAddress!.isNotEmpty).length;
-      int devicesWithVendor = devices.where((d) => d.vendor != null).length;
-      
+      // Print summary
       debugPrint('═══════════════════════════════════════');
       debugPrint('SCAN SUMMARY');
       debugPrint('═══════════════════════════════════════');
       debugPrint('Total Devices: ${devices.length}');
-      debugPrint('With MAC Address: $devicesWithMac/${devices.length}');
-      debugPrint('With Vendor Info: $devicesWithVendor/${devices.length}');
-      debugPrint('═══════════════════════════════════════');
-      
-      // Print each device
       for (final device in devices) {
-        debugPrint('${device.isRouter ? "🌐" : "📱"} ${device.ipAddress}');
-        debugPrint('   MAC: ${device.macAddress ?? "Unknown"}');
-        debugPrint('   Vendor: ${device.vendor ?? "Unknown"}');
+        debugPrint(
+          '${device.isCurrentDevice
+              ? "📱"
+              : device.isRouter
+              ? "🌐"
+              : "📱"} ${device.displayName}',
+        );
+        debugPrint('   IP: ${device.ipAddress}');
+        debugPrint('   Hostname: ${device.hostname ?? "N/A"}');
       }
       debugPrint('═══════════════════════════════════════');
-      
     } catch (e) {
       debugPrint('Error during network scan: $e');
-      debugPrint('Stack trace: ${StackTrace.current}');
     }
 
     return devices;
   }
 
-  /// Create a device model with vendor lookup
-  Future<DeviceModel> _createDeviceModel(String ip, String? macAddress) async {
+  /// Create device model with hostname detection
+  Future<DeviceModel> _createDeviceModel(String ip) async {
+    final isRouter = (ip == gatewayIp);
+    final isCurrentDevice = (ip == currentIp);
+
+    String? hostname;
     String? vendor;
-    
-    if (macAddress != null && macAddress.isNotEmpty) {
-      vendor = await EnhancedMacVendorService.getVendor(macAddress);
-    } else {
-      debugPrint('⚠️ No MAC address for IP: $ip');
+
+    try {
+      // Try to resolve hostname
+      final result = await InternetAddress.lookup(
+        ip,
+      ).timeout(const Duration(milliseconds: 500));
+
+      if (result.isNotEmpty && result.first.host != ip) {
+        hostname = result.first.host;
+        debugPrint('Resolved hostname for $ip: $hostname');
+
+        // Extract vendor from hostname if possible
+        vendor = _extractVendorFromHostname(hostname);
+      }
+    } catch (e) {
+      debugPrint('Could not resolve hostname for $ip');
     }
 
-    final isRouter = (ip == gatewayIp);
+    // For current device, try to get device model
+    if (isCurrentDevice && vendor == null) {
+      vendor = await _getCurrentDeviceModel();
+    }
 
     return DeviceModel(
       ipAddress: ip,
-      macAddress: macAddress,
+      hostname: hostname,
       vendor: vendor,
       isRouter: isRouter,
+      isCurrentDevice: isCurrentDevice,
     );
   }
 
-  /// TCP port scan to detect devices
+  /// Extract vendor name from hostname
+  String? _extractVendorFromHostname(String hostname) {
+    final hostnameLower = hostname.toLowerCase();
+
+    // Common phone brands
+    if (hostnameLower.contains('infinix'))
+      return 'Infinix ${_extractModel(hostname)}';
+    if (hostnameLower.contains('realme'))
+      return 'Realme ${_extractModel(hostname)}';
+    if (hostnameLower.contains('redmi'))
+      return 'Redmi ${_extractModel(hostname)}';
+    if (hostnameLower.contains('xiaomi'))
+      return 'Xiaomi ${_extractModel(hostname)}';
+    if (hostnameLower.contains('oppo'))
+      return 'OPPO ${_extractModel(hostname)}';
+    if (hostnameLower.contains('vivo'))
+      return 'vivo ${_extractModel(hostname)}';
+    if (hostnameLower.contains('samsung'))
+      return 'Samsung ${_extractModel(hostname)}';
+    if (hostnameLower.contains('iphone')) return 'iPhone';
+    if (hostnameLower.contains('oneplus'))
+      return 'OnePlus ${_extractModel(hostname)}';
+    if (hostnameLower.contains('huawei'))
+      return 'Huawei ${_extractModel(hostname)}';
+    if (hostnameLower.contains('tecno'))
+      return 'Tecno ${_extractModel(hostname)}';
+
+    return null;
+  }
+
+  /// Extract model from hostname (e.g., "realme-note-50" -> "Note 50")
+  String _extractModel(String hostname) {
+    // Remove brand name and clean up
+    String model = hostname
+        .toLowerCase()
+        .replaceAll('infinix-', '')
+        .replaceAll('realme-', '')
+        .replaceAll('redmi-', '')
+        .replaceAll('xiaomi-', '')
+        .replaceAll('oppo-', '')
+        .replaceAll('vivo-', '')
+        .replaceAll('samsung-', '')
+        .replaceAll('oneplus-', '')
+        .replaceAll('huawei-', '')
+        .replaceAll('tecno-', '');
+
+    // Capitalize and format
+    return model
+        .split('-')
+        .map((word) => word[0].toUpperCase() + word.substring(1))
+        .join(' ')
+        .trim();
+  }
+
+  /// Get current device model (Android only)
+  Future<String?> _getCurrentDeviceModel() async {
+    try {
+      if (Platform.isAndroid) {
+        // Try to read from system properties
+        final result = await Process.run('getprop', ['ro.product.model']);
+        if (result.exitCode == 0) {
+          final model = result.stdout.toString().trim();
+          if (model.isNotEmpty) {
+            return model;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Could not get device model: $e');
+    }
+    return null;
+  }
+
+  /// TCP port scan
   Future<bool> _tcpPortScan(String ip, List<int> ports) async {
     try {
       for (final port in ports) {
@@ -286,7 +330,7 @@ class NetworkScanService {
     }
   }
 
-  /// Ping a host to check if it's active
+  /// Ping a host
   Future<bool> _pingHost(String ip) async {
     try {
       final ping = Ping(ip, count: 1, timeout: 1);
@@ -303,19 +347,18 @@ class NetworkScanService {
     }
   }
 
-  /// Extract subnet from IP address
+  /// Extract subnet from IP
   String? _getSubnet(String ip) {
     try {
       final parts = ip.split('.');
       if (parts.length != 4) return null;
-
       return '${parts[0]}.${parts[1]}.${parts[2]}';
     } catch (e) {
       return null;
     }
   }
 
-  /// Compare two IP addresses for sorting
+  /// Compare IP addresses
   int _compareIpAddresses(String ip1, String ip2) {
     try {
       final parts1 = ip1.split('.').map(int.parse).toList();
@@ -326,88 +369,9 @@ class NetworkScanService {
           return parts1[i].compareTo(parts2[i]);
         }
       }
-
       return 0;
     } catch (e) {
       return 0;
     }
-  }
-
-  /// Quick scan - only scan first 50 IPs (for testing)
-  Future<List<DeviceModel>> quickScan({Function(int)? onProgress}) async {
-    List<DeviceModel> devices = [];
-    Set<String> foundIps = {};
-
-    try {
-      if (currentIp == null || gatewayIp == null) {
-        final connected = await getWifiInfo();
-        if (!connected) return devices;
-      }
-
-      final subnet = _getSubnet(currentIp!);
-      if (subnet == null) return devices;
-
-      debugPrint('Quick scan on $subnet.1-50');
-
-      // Refresh ARP cache first
-      await ArpService.refreshArpCache(subnet, maxHosts: 50);
-
-      final arpTable = await ArpService.getArpTable();
-      for (final entry in arpTable.entries) {
-        if (entry.key.startsWith(subnet)) {
-          foundIps.add(entry.key);
-        }
-      }
-
-      int scannedHosts = 0;
-      int totalHosts = 50;
-
-      List<Future<void>> scanFutures = [];
-
-      for (int i = 1; i <= 50; i++) {
-        final ip = '$subnet.$i';
-
-        if (foundIps.contains(ip)) {
-          scannedHosts++;
-          continue;
-        }
-
-        final future = Future.wait([
-          _tcpPortScan(ip, [80, 443, 22]),
-          _pingHost(ip),
-        ]).then((results) {
-          if (results[0] || results[1]) {
-            foundIps.add(ip);
-          }
-
-          scannedHosts++;
-          if (onProgress != null) {
-            final progress = ((scannedHosts / totalHosts) * 100).round();
-            onProgress(progress);
-          }
-        });
-
-        scanFutures.add(future);
-      }
-
-      await Future.wait(scanFutures);
-
-      final finalArpTable = await ArpService.getArpTable();
-
-      for (final ip in foundIps) {
-        final device = await _createDeviceModel(ip, finalArpTable[ip]);
-        devices.add(device);
-      }
-
-      devices.sort((a, b) {
-        if (a.isRouter) return -1;
-        if (b.isRouter) return 1;
-        return _compareIpAddresses(a.ipAddress, b.ipAddress);
-      });
-    } catch (e) {
-      debugPrint('Error during quick scan: $e');
-    }
-
-    return devices;
   }
 }

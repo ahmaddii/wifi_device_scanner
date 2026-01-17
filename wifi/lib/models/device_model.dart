@@ -1,104 +1,99 @@
-/// Model representing a network device
-/// Contains IP, MAC address, vendor info, and device type
+/// Model representing a network device with hostname detection
 class DeviceModel {
   final String ipAddress;
-  final String? macAddress; // Nullable - may not be available on all platforms
-  final String? vendor; // Device manufacturer (Apple, Samsung, etc.)
-  final bool isRouter; // True if this is the gateway/router
-  final DateTime discoveredAt;
+  final String? macAddress;
+  final String? vendor;
+  final String? hostname; // Device hostname (e.g., "realme-note-50")
+  final bool isRouter;
+  final bool isCurrentDevice;
 
   DeviceModel({
     required this.ipAddress,
     this.macAddress,
     this.vendor,
+    this.hostname,
     this.isRouter = false,
-    DateTime? discoveredAt,
-  }) : discoveredAt = discoveredAt ?? DateTime.now();
+    this.isCurrentDevice = false,
+  });
 
-  /// Get device type icon based on vendor and router status
+  /// Get device type based on vendor
   DeviceType get deviceType {
     if (isRouter) return DeviceType.router;
-    
+
     if (vendor != null) {
       final vendorLower = vendor!.toLowerCase();
-      
-      // Check for common device types based on vendor
-      if (vendorLower.contains('apple') || 
-          vendorLower.contains('iphone') ||
-          vendorLower.contains('ipad')) {
-        return DeviceType.phone;
-      }
-      
-      if (vendorLower.contains('samsung') ||
-          vendorLower.contains('huawei') ||
+
+      // Phone manufacturers
+      if (vendorLower.contains('infinix') ||
+          vendorLower.contains('realme') ||
           vendorLower.contains('xiaomi') ||
+          vendorLower.contains('redmi') ||
           vendorLower.contains('oppo') ||
           vendorLower.contains('vivo') ||
-          vendorLower.contains('oneplus')) {
+          vendorLower.contains('samsung') ||
+          vendorLower.contains('apple') ||
+          vendorLower.contains('huawei') ||
+          vendorLower.contains('oneplus') ||
+          vendorLower.contains('tecno') ||
+          vendorLower.contains('motorola')) {
         return DeviceType.phone;
       }
-      
-      if (vendorLower.contains('tp-link') ||
-          vendorLower.contains('cisco') ||
-          vendorLower.contains('netgear') ||
-          vendorLower.contains('asus') ||
-          vendorLower.contains('d-link')) {
-        return DeviceType.router;
-      }
-      
+
+      // Computer manufacturers
       if (vendorLower.contains('dell') ||
           vendorLower.contains('hp') ||
           vendorLower.contains('lenovo') ||
+          vendorLower.contains('asus') ||
           vendorLower.contains('acer') ||
-          vendorLower.contains('asus')) {
+          vendorLower.contains('microsoft') ||
+          vendorLower.contains('intel')) {
         return DeviceType.computer;
       }
     }
-    
+
     return DeviceType.unknown;
   }
 
-  /// Get display name for vendor
-  String get displayVendor {
-    if (isRouter) return 'Router (Gateway)';
-    return vendor ?? 'Unknown Vendor';
-  }
-
-  /// Get display name for MAC address
-  String get displayMac {
-    if (macAddress == null || macAddress!.isEmpty) {
-      return 'MAC: Not available';
+  /// Display name - prioritize hostname, then vendor, then IP
+  String get displayName {
+    if (isCurrentDevice) {
+      // Show device model from vendor if available
+      if (vendor != null && vendor!.isNotEmpty) {
+        return vendor!;
+      }
+      return 'My Device';
     }
-    return 'MAC: ${macAddress!.toUpperCase()}';
+
+    if (isRouter) {
+      return ipAddress;
+    }
+
+    // Use hostname if available (e.g., "realme-note-50")
+    if (hostname != null && hostname!.isNotEmpty) {
+      return hostname!;
+    }
+
+    // Otherwise use vendor if available
+    if (vendor != null && vendor!.isNotEmpty) {
+      return vendor!;
+    }
+
+    // Fallback to IP
+    return ipAddress;
   }
 
-  @override
-  String toString() {
-    return 'Device{IP: $ipAddress, MAC: ${macAddress ?? "N/A"}, Vendor: ${vendor ?? "Unknown"}, Router: $isRouter}';
-  }
+  /// Secondary label (shown below device name)
+  String get displayLabel {
+    if (isCurrentDevice) {
+      return '(My Device)';
+    }
 
-  /// Create a copy with updated fields
-  DeviceModel copyWith({
-    String? ipAddress,
-    String? macAddress,
-    String? vendor,
-    bool? isRouter,
-    DateTime? discoveredAt,
-  }) {
-    return DeviceModel(
-      ipAddress: ipAddress ?? this.ipAddress,
-      macAddress: macAddress ?? this.macAddress,
-      vendor: vendor ?? this.vendor,
-      isRouter: isRouter ?? this.isRouter,
-      discoveredAt: discoveredAt ?? this.discoveredAt,
-    );
+    if (isRouter) {
+      return '(Router)';
+    }
+
+    return 'Unknow'; // Match the screenshot spelling
   }
 }
 
-/// Enum for device types
-enum DeviceType {
-  router,
-  phone,
-  computer,
-  unknown,
-}
+enum DeviceType { router, phone, computer, unknown }

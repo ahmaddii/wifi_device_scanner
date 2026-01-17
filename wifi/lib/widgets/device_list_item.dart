@@ -1,127 +1,88 @@
 import 'package:flutter/material.dart';
 import '../models/device_model.dart';
 
-/// Widget displaying a single network device in the list
-/// Shows icon, IP, MAC, vendor, and Block button
+/// Device list item matching the screenshot design
 class DeviceListItem extends StatelessWidget {
   final DeviceModel device;
-  final VoidCallback onBlockTapped;
+  final VoidCallback? onTap;
 
-  const DeviceListItem({
-    super.key,
-    required this.device,
-    required this.onBlockTapped,
-  });
+  const DeviceListItem({super.key, required this.device, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey[300]!, width: 1)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            // Device Icon
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _getDeviceColor().withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                _getDeviceIcon(),
-                color: _getDeviceColor(),
-                size: 32,
-              ),
-            ),
-            
-            const SizedBox(width: 16),
-            
-            // Device Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Vendor / Device Name
-                  Text(
-                    device.displayVendor,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                // Device Icon (left side)
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!, width: 1),
                   ),
-                  
-                  const SizedBox(height: 4),
-                  
-                  // IP Address
-                  Row(
+                  child: Icon(
+                    _getDeviceIcon(),
+                    size: 32,
+                    color: const Color(
+                      0xFF1E3A5F,
+                    ), // Dark blue matching screenshot
+                  ),
+                ),
+
+                const SizedBox(width: 16),
+
+                // Device Info (middle - expanded)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
-                        Icons.location_on,
-                        size: 14,
-                        color: Colors.grey,
-                      ),
-                      const SizedBox(width: 4),
+                      // Device Name
                       Text(
-                        device.ipAddress,
+                        device.displayName,
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
                           color: Colors.black87,
                         ),
                       ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 2),
-                  
-                  // MAC Address
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.label,
-                        size: 14,
-                        color: Colors.grey,
+
+                      const SizedBox(height: 4),
+
+                      // Label (My Device / Router / Unknow)
+                      Text(
+                        device.displayLabel,
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          device.displayMac,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+
+                      const SizedBox(height: 4),
+
+                      // IP Address
+                      Text(
+                        'IP Address: ${device.ipAddress}',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       ),
                     ],
-                  ),
-                ],
-              ),
-            ),
-            
-            // Block Button
-            if (!device.isRouter) // Don't show block button for router
-              ElevatedButton.icon(
-                onPressed: onBlockTapped,
-                icon: const Icon(Icons.block, size: 18),
-                label: const Text('Block'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-              ),
-          ],
+
+                // Arrow Icon (right side)
+                Icon(Icons.arrow_forward, color: Colors.grey[400], size: 24),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -138,22 +99,7 @@ class DeviceListItem extends StatelessWidget {
         return Icons.computer;
       case DeviceType.unknown:
       default:
-        return Icons.devices;
-    }
-  }
-
-  /// Get color based on device type
-  Color _getDeviceColor() {
-    switch (device.deviceType) {
-      case DeviceType.router:
-        return Colors.blue;
-      case DeviceType.phone:
-        return Colors.green;
-      case DeviceType.computer:
-        return Colors.orange;
-      case DeviceType.unknown:
-      default:
-        return Colors.grey;
+        return Icons.phone_android; // Default to phone icon
     }
   }
 }
