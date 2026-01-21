@@ -39,7 +39,7 @@ class WifiScannerApp extends StatelessWidget {
         cardTheme: CardThemeData(
           elevation: 2,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
 
