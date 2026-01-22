@@ -1,9 +1,11 @@
-/// Model representing a network device with hostname detection
+import '../services/hostname_resolver_service.dart';
+
+/// Model representing a network device
 class DeviceModel {
   final String ipAddress;
   final String? macAddress;
   final String? vendor;
-  final String? hostname; // Device hostname (e.g., "realme-note-50")
+  final String? hostname;
   final bool isRouter;
   final bool isCurrentDevice;
 
@@ -16,10 +18,44 @@ class DeviceModel {
     this.isCurrentDevice = false,
   });
 
-  /// Get device type based on vendor
+  /// Get device type based on vendor and hostname
   DeviceType get deviceType {
     if (isRouter) return DeviceType.router;
 
+    // Check hostname for clues
+    if (hostname != null) {
+      final hostnameLower = hostname!.toLowerCase();
+
+      // Desktop/Laptop keywords
+      if (hostnameLower.contains('desktop') ||
+          hostnameLower.contains('laptop') ||
+          hostnameLower.contains('pc') ||
+          hostnameLower.contains('pop-os') ||
+          hostnameLower.contains('ubuntu') ||
+          hostnameLower.contains('fedora') ||
+          hostnameLower.contains('arch') ||
+          hostnameLower.contains('manjaro') ||
+          hostnameLower.contains('mint')) {
+        return DeviceType.computer;
+      }
+
+      // Mobile keywords
+      if (hostnameLower.contains('android') ||
+          hostnameLower.contains('iphone') ||
+          hostnameLower.contains('ipad') ||
+          hostnameLower.contains('realme') ||
+          hostnameLower.contains('redmi') ||
+          hostnameLower.contains('xiaomi') ||
+          hostnameLower.contains('samsung') ||
+          hostnameLower.contains('oppo') ||
+          hostnameLower.contains('vivo') ||
+          hostnameLower.contains('oneplus') ||
+          hostnameLower.contains('infinix')) {
+        return DeviceType.phone;
+      }
+    }
+
+    // Check vendor
     if (vendor != null) {
       final vendorLower = vendor!.toLowerCase();
 
@@ -35,7 +71,9 @@ class DeviceModel {
           vendorLower.contains('huawei') ||
           vendorLower.contains('oneplus') ||
           vendorLower.contains('tecno') ||
-          vendorLower.contains('motorola')) {
+          vendorLower.contains('motorola') ||
+          vendorLower.contains('nokia') ||
+          vendorLower.contains('htc')) {
         return DeviceType.phone;
       }
 
@@ -46,7 +84,9 @@ class DeviceModel {
           vendorLower.contains('asus') ||
           vendorLower.contains('acer') ||
           vendorLower.contains('microsoft') ||
-          vendorLower.contains('intel')) {
+          vendorLower.contains('intel') ||
+          vendorLower.contains('toshiba') ||
+          vendorLower.contains('sony')) {
         return DeviceType.computer;
       }
     }
@@ -54,35 +94,41 @@ class DeviceModel {
     return DeviceType.unknown;
   }
 
-  /// Display name - prioritize hostname, then vendor, then IP
+  /// Display name - smart detection
   String get displayName {
+    // Current device
     if (isCurrentDevice) {
-      // Show device model from vendor if available
+      if (hostname != null && hostname!.isNotEmpty) {
+        return HostnameResolverService.formatHostname(hostname!);
+      }
       if (vendor != null && vendor!.isNotEmpty) {
         return vendor!;
       }
       return 'My Device';
     }
 
+    // Router
     if (isRouter) {
+      if (hostname != null && hostname!.isNotEmpty) {
+        return HostnameResolverService.formatHostname(hostname!);
+      }
       return ipAddress;
     }
 
-    // Use hostname if available (e.g., "realme-note-50")
+    // Priority: Hostname > Vendor > IP
     if (hostname != null && hostname!.isNotEmpty) {
-      return hostname!;
+      // Format hostname nicely
+      return HostnameResolverService.formatHostname(hostname!);
     }
 
-    // Otherwise use vendor if available
     if (vendor != null && vendor!.isNotEmpty) {
       return vendor!;
     }
 
-    // Fallback to IP
     return ipAddress;
   }
 
-  /// Secondary label (shown below device name)
+  /// Secondary label
   String get displayLabel {
     if (isCurrentDevice) {
       return '(My Device)';
@@ -92,7 +138,12 @@ class DeviceModel {
       return '(Router)';
     }
 
-    return 'Unknow'; // Match the screenshot spelling
+    // Show vendor as secondary info if hostname is primary
+    if (hostname != null && hostname!.isNotEmpty && vendor != null) {
+      return vendor!;
+    }
+
+    return 'Unknown';
   }
 }
 
